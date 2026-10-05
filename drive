@@ -1,312 +1,331 @@
 package org.firstinspires.ftc.teamcode;
+
 import com.bylazar.telemetry.PanelsTelemetry;
 import com.bylazar.telemetry.TelemetryManager;
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-
-
-
-import org.firstinspires.ftc.robotcontroller.external.samples.BasicOpMode_Iterative;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.BuiltinCameraDirection;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
-
 import java.util.List;
-
 
 @TeleOp(name = "2025")
 public class drive extends LinearOpMode {
-   private DcMotor rightFront = null;
-   private DcMotor leftFront = null;
-   private DcMotor rightBack = null;
-   private DcMotor leftBack = null;
 
-
-   private DcMotor takeout1 = null;
-   private DcMotor takeout2 = null;
-   private DcMotor takein = null;
-
-
-   private TelemetryManager panelsTelemetry;
-
-
-   private double[] apriltagData = {-1};
-   private boolean reset = false;
-
-
-
-
-   private static final boolean USE_WEBCAM = true;
-   private AprilTagProcessor aprilTag;
-   private VisionPortal visionPortal;
-
-
-   private ElapsedTime runtime = new ElapsedTime();
-
-
-
-
-   @Override
-   public void runOpMode() throws InterruptedException {
-       rightFront = hardwareMap.dcMotor.get("fr");
-       rightBack = hardwareMap.dcMotor.get("br");
-       leftFront = hardwareMap.dcMotor.get("fl");
-       leftBack = hardwareMap.dcMotor.get("bl");
-       takeout1= hardwareMap.dcMotor.get("f1");
-       takeout2= hardwareMap.dcMotor.get("f2");
-       takein = hardwareMap.dcMotor.get("i");
-
-
-       rightFront.setDirection(DcMotor.Direction.REVERSE);
-       rightBack.setDirection(DcMotor.Direction.REVERSE);
-
-
-       takein.setDirection(DcMotor.Direction.REVERSE);
-
-
-       initAprilTag();
-       panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
-
-
-       waitForStart();
-
-
-
-
-       while (opModeIsActive()) {
-
-
-           apriltagData = telemetryAprilTag();
-
-
-           double ID = apriltagData[0];
-           double r = apriltagData[1];
-           double b = apriltagData[2]; //correction of ~3 degrees to account for the camera offset
-
-
-
-
-           if ((gamepad1.left_stick_x == 0) && (gamepad1.right_stick_y == 0) && (!gamepad2.a)) {
-               leftFront.setPower(0);
-               leftBack.setPower(0);
-               rightFront.setPower(0);
-               rightBack.setPower(0);
-           }
-
-
-
-
-           //forward/backwards
-           if (gamepad1.right_stick_y != 0) {
-               double power = gamepad1.right_stick_y;
-               leftFront.setPower(0.8 * power);
-               leftBack.setPower(0.8 * power);
-               rightFront.setPower(0.8 * power);
-               rightBack.setPower(0.8 * power);
-
-
-
-
-               telemetry.addData("right stick y ", "value" + gamepad1.right_stick_y);
-           }
-
-
-           if (gamepad1.left_bumper) {
-               leftFront.setPower(-0.67);
-               leftBack.setPower(0.67);
-               rightFront.setPower(0.67);
-               rightBack.setPower(-0.67);
-
-
-
-
-               telemetry.addLine("shuffle left");
-           }
-
-
-           if (gamepad1.right_bumper) {
-               leftFront.setPower(0.67);
-               leftBack.setPower(-0.67);
-               rightFront.setPower(-0.67);
-               rightBack.setPower(0.67);
-
-
-
-
-               telemetry.addLine("shuffle right");
-           }
-
-
-
-
-           //turn
-           if (gamepad1.left_stick_x != 0) {
-               double power = gamepad1.left_stick_x;
-               leftFront.setPower(-0.8 * power);
-               leftBack.setPower(-0.8 * power);
-               rightFront.setPower(0.8 * power);
-               rightBack.setPower(0.8 * power);
-               telemetry.addData("right stick x ", "value" + gamepad1.left_stick_x);
-
-
-
-
-           }
-
-
-
-
-           if ((gamepad2.left_stick_y == 0) && (gamepad2.left_trigger == 0) && (gamepad2.right_trigger == 0) && (!gamepad2.right_bumper) && (!gamepad2.left_bumper) && !gamepad2.a) {
-               takein.setPower(0);
-               takeout1.setPower(0);
-               takeout2.setPower(0);
-           }
-
-
-
-
-           //intake
-           if (gamepad2.left_stick_y != 0) {
-               takein.setPower(gamepad2.left_stick_y);
-               telemetry.addData("intake:", gamepad2.left_stick_y);
-           }
-
-
-
-
-           //launch
-           if (gamepad2.right_stick_y != 0) {
-               takeout1.setPower(gamepad2.right_stick_y);
-               takeout2.setPower(gamepad2.right_stick_y);
-               telemetry.addData("outtake:", gamepad2.right_stick_y);
-           }
-
-
-           telemetry.addLine("Gamepad 2: Hold A to launch!");
-           telemetry.update();
-           //automated launch
-           if (gamepad2.a) {
-
-
-               //rotate so within a 4 degree range of apriltag
-               if (b != -10000 &&  b < -2) {
-                   leftFront.setPower(-0.15);
-                   leftBack.setPower(-0.15);
-                   rightFront.setPower(0.15);
-                   rightBack.setPower(0.15);
-                   resetRuntime();
-               } else if (b != -10000 && b > 2) {
-                   leftFront.setPower(0.15);
-                   leftBack.setPower(0.15);
-                   rightFront.setPower(-0.15);
-                   rightBack.setPower(-0.15);
-                   resetRuntime();
-               } else {
-                   leftFront.setPower(0);
-                   leftBack.setPower(0);
-                   rightFront.setPower(0);
-                   rightBack.setPower(0);
-               }
-
-
-               //when facing apriltag head on
-               if (b > -2 && b < 2) {
-                   if (!reset) {
-                       resetRuntime();
-                       reset = true;
-                   }
-                   /** I don't know what I'm doing. Distance from apriltag divided by 200 (presumably the furthest the robot will ever be from the goal).
-                    Then raised to the power of 1/10 ish to make it like logarithmic-ish. idk put it in desmos **/
-                   double power = Math.min(Math.pow(((r+5)/190), 0.1), 1);
-                   telemetry.addData("launch power: ", power);
-                   telemetry.update();
-                   takeout1.setPower(power);
-                   takeout2.setPower(power);
-                   if (runtime.seconds() > 10) {
-                       takein.setPower(1);
-                   }
-               } else {
-                   reset = false;
-               }
-           }
-
-
-
-
-       }
-
-
-
-
-
-
-
-
-   }
-
-
-
-
-   private void initAprilTag() {
-       aprilTag = AprilTagProcessor.easyCreateWithDefaults();
-       if (USE_WEBCAM) {
-           visionPortal = VisionPortal.easyCreateWithDefaults(
-                   hardwareMap.get(WebcamName.class, "Webcam 1"), aprilTag);
-       } else {
-           visionPortal = VisionPortal.easyCreateWithDefaults(
-                   BuiltinCameraDirection.BACK, aprilTag);
-       }
-   }
-
-
-
-
-   private double[] telemetryAprilTag() {
-       double ID = -1;
-       double r = -1;
-       double b = -10000;
-       double e = -1;
-       List<AprilTagDetection> currentDetections = aprilTag.getDetections();
-       telemetry.addData("# AprilTags Detected", currentDetections.size());
-
-
-       for (AprilTagDetection detection : currentDetections) {
-           if (detection.metadata != null) {
-               ID = detection.id;
-               r = detection.ftcPose.range; //inch
-               b = detection.ftcPose.bearing; //deg
-               e = detection.ftcPose.elevation; //deg
-
-
-               telemetry.addData("AprilTag ID: ", ID);
-               telemetry.addData("dist (inches) from apriltag: ", r);
-               telemetry.addData("degrees from apriltag: ", b);
-
-
-               break;
-           }
-       }
-       return new double[]{ID, r, b, e};
-   }
-
-
-
-
+    // motors
+    private DcMotor rightFront, leftFront, rightBack, leftBack;
+    private DcMotor takeout1, takeout2, takein;
+
+    private TelemetryManager panelsTelemetry;
+
+    // vision
+    private static final boolean USE_WEBCAM = true;
+    private AprilTagProcessor aprilTag;
+    private VisionPortal visionPortal;
+
+    // launch state stuff
+    private enum LaunchState { IDLE, ALIGNING, LAUNCHING, DONE }
+    private LaunchState launchState = LaunchState.IDLE;
+    private ElapsedTime stateTimer = new ElapsedTime();
+    private ElapsedTime launchTimer = new ElapsedTime();
+
+    // how long we're willing to try aligning before giving up
+    private static final double ALIGN_TIMEOUT = 4.0;
+    // how long we run the shooter before feeding
+    private static final double LAUNCH_SPINUP = 1.0;
+    // how long total we run the launch before calling it done
+    private static final double LAUNCH_TIMEOUT = 4.0;
+    // how long to keep feeding after spinup
+    private static final double FEED_TIME = 1.5;
+    // deadband for bearing, degrees
+    private static final double BEARING_TOLERANCE = 2.0;
+
+    // last time we saw a tag
+    private double lastTagTime = 0;
+    // if we havent seen a tag in this long, consider it lost
+    private static final double TAG_LOST_TIMEOUT = 0.5;
+
+    // holder for apriltag data so we dont pass around a double[] with magic indices
+    private static class TagData {
+        int id = -1;
+        double range = -1;
+        double bearing = Double.NaN;
+        double elevation = -1;
+        boolean valid = false;
+    }
+
+    private TagData tag = new TagData();
+
+    @Override
+    public void runOpMode() throws InterruptedException {
+
+        // hardware map
+        rightFront = hardwareMap.dcMotor.get("fr");
+        rightBack  = hardwareMap.dcMotor.get("br");
+        leftFront  = hardwareMap.dcMotor.get("fl");
+        leftBack   = hardwareMap.dcMotor.get("bl");
+        takeout1   = hardwareMap.dcMotor.get("f1");
+        takeout2   = hardwareMap.dcMotor.get("f2");
+        takein     = hardwareMap.dcMotor.get("i");
+
+        // reverse the right side so positive power = forward
+        rightFront.setDirection(DcMotor.Direction.REVERSE);
+        rightBack.setDirection(DcMotor.Direction.REVERSE);
+
+        // intake is mounted backwards i think
+        takein.setDirection(DcMotor.Direction.REVERSE);
+
+        initAprilTag();
+
+        panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
+
+        waitForStart();
+
+        stateTimer.reset();
+        launchTimer.reset();
+
+        while (opModeIsActive()) {
+
+            // always update tag data first
+            tag = readAprilTag();
+
+            // driver control only when not doing auto launch
+            if (launchState == LaunchState.IDLE) {
+                handleDrive();
+                handleIntake();
+                handleManualLaunch();
+            }
+
+            // auto launch sequence
+            handleAutoLaunch();
+
+            // dashboard stuff
+            panelsTelemetry.update(telemetry);
+            telemetry.update();
+        }
+    }
+
+    // ---------- driver control ----------
+
+    private void handleDrive() {
+
+        // stop if no input
+        if (gamepad1.left_stick_x == 0 && gamepad1.right_stick_y == 0) {
+            setDrivePowers(0, 0, 0, 0);
+        }
+
+        // forward / back
+        if (gamepad1.right_stick_y != 0) {
+            double p = 0.8 * gamepad1.right_stick_y;
+            setDrivePowers(p, p, p, p);
+        }
+
+        // shuffle left
+        if (gamepad1.left_bumper) {
+            setDrivePowers(-0.67, 0.67, 0.67, -0.67);
+        }
+
+        // shuffle right
+        if (gamepad1.right_bumper) {
+            setDrivePowers(0.67, -0.67, -0.67, 0.67);
+        }
+
+        // turn
+        if (gamepad1.left_stick_x != 0) {
+            double p = 0.8 * gamepad1.left_stick_x;
+            setDrivePowers(-p, -p, p, p);
+        }
+    }
+
+    private void handleIntake() {
+
+        // stop if no input
+        if (gamepad2.left_stick_y == 0 && gamepad2.right_stick_y == 0) {
+            takein.setPower(0);
+            takeout1.setPower(0);
+            takeout2.setPower(0);
+        }
+
+        // intake
+        if (gamepad2.left_stick_y != 0) {
+            takein.setPower(gamepad2.left_stick_y);
+        }
+
+        // manual outtake
+        if (gamepad2.right_stick_y != 0) {
+            takeout1.setPower(gamepad2.right_stick_y);
+            takeout2.setPower(gamepad2.right_stick_y);
+        }
+    }
+
+    private void handleManualLaunch() {
+        // nothing here yet, auto launch is on A
+        // could add a manual spinup on a different button later
+    }
+
+    // ---------- auto launch ----------
+
+    private void handleAutoLaunch() {
+
+        // start the sequence
+        if (launchState == LaunchState.IDLE && gamepad2.a) {
+            launchState = LaunchState.ALIGNING;
+            stateTimer.reset();
+        }
+
+        // if A released during aligning, cancel
+        if (!gamepad2.a && launchState == LaunchState.ALIGNING) {
+            launchState = LaunchState.IDLE;
+            stopAll();
+            return;
+        }
+
+        switch (launchState) {
+
+            case IDLE:
+                // nothing
+                break;
+
+            case ALIGNING:
+                // if we lost the tag for too long, bail
+                if (!tag.valid && (stateTimer.seconds() - lastTagTime) > TAG_LOST_TIMEOUT) {
+                    telemetry.addLine("lost tag, aborting align");
+                    launchState = LaunchState.IDLE;
+                    stopAll();
+                    break;
+                }
+
+                // if we've been aligning too long, give up
+                if (stateTimer.seconds() > ALIGN_TIMEOUT) {
+                    telemetry.addLine("align timeout, aborting");
+                    launchState = LaunchState.IDLE;
+                    stopAll();
+                    break;
+                }
+
+                // if we're within tolerance, move to launching
+                if (tag.valid && Math.abs(tag.bearing) < BEARING_TOLERANCE) {
+                    setDrivePowers(0, 0, 0, 0);
+                    launchState = LaunchState.LAUNCHING;
+                    launchTimer.reset();
+                    break;
+                }
+
+                // otherwise keep turning toward the tag
+                if (tag.valid) {
+                    if (tag.bearing < -BEARING_TOLERANCE) {
+                        setDrivePowers(-0.15, -0.15, 0.15, 0.15);
+                    } else if (tag.bearing > BEARING_TOLERANCE) {
+                        setDrivePowers(0.15, 0.15, -0.15, -0.15);
+                    } else {
+                        setDrivePowers(0, 0, 0, 0);
+                    }
+                }
+                break;
+
+            case LAUNCHING:
+                // spinup phase
+                if (launchTimer.seconds() < LAUNCH_SPINUP) {
+                    double p = computeLaunchPower(tag.range);
+                    takeout1.setPower(p);
+                    takeout2.setPower(p);
+                    telemetry.addData("spinup power", p);
+                    break;
+                }
+
+                // feed phase
+                double p = computeLaunchPower(tag.range);
+                takeout1.setPower(p);
+                takeout2.setPower(p);
+                takein.setPower(1);
+                telemetry.addData("feeding, power", p);
+
+                // done
+                if (launchTimer.seconds() > LAUNCH_TIMEOUT) {
+                    launchState = LaunchState.DONE;
+                    launchTimer.reset();
+                }
+                break;
+
+            case DONE:
+                // stop everything, then back to idle
+                stopAll();
+                if (launchTimer.seconds() > 0.3) {
+                    launchState = LaunchState.IDLE;
+                }
+                break;
+        }
+    }
+
+    // launch power scales with distance
+    // i tuned this in desmos, its not scientific
+    // farther tag = more power but with diminishing returns
+    private double computeLaunchPower(double rangeInches) {
+        if (rangeInches <= 0) return 0.5;
+        double raw = Math.pow(((rangeInches + 5) / 190.0), 0.1);
+        return Math.min(Math.max(raw, 0.3), 1.0);
+    }
+
+    // ---------- helpers ----------
+
+    private void setDrivePowers(double lf, double lb, double rf, double rb) {
+        leftFront.setPower(lf);
+        leftBack.setPower(lb);
+        rightFront.setPower(rf);
+        rightBack.setPower(rb);
+    }
+
+    private void stopAll() {
+        setDrivePowers(0, 0, 0, 0);
+        takein.setPower(0);
+        takeout1.setPower(0);
+        takeout2.setPower(0);
+    }
+
+    // ---------- vision ----------
+
+    private void initAprilTag() {
+        aprilTag = AprilTagProcessor.easyCreateWithDefaults();
+        if (USE_WEBCAM) {
+            visionPortal = VisionPortal.easyCreateWithDefaults(
+                    hardwareMap.get(WebcamName.class, "Webcam 1"), aprilTag);
+        } else {
+            visionPortal = VisionPortal.easyCreateWithDefaults(
+                    BuiltinCameraDirection.BACK, aprilTag);
+        }
+    }
+
+    // read the first valid tag we see and fill a TagData
+    private TagData readAprilTag() {
+        TagData out = new TagData();
+
+        List<AprilTagDetection> detections = aprilTag.getDetections();
+        telemetry.addData("# tags", detections.size());
+
+        for (AprilTagDetection d : detections) {
+            if (d.metadata != null) {
+                out.id = d.id;
+                out.range = d.ftcPose.range;
+                out.bearing = d.ftcPose.bearing;
+                out.elevation = d.ftcPose.elevation;
+                out.valid = true;
+
+                lastTagTime = stateTimer.seconds();
+
+                telemetry.addData("id", out.id);
+                telemetry.addData("range", out.range);
+                telemetry.addData("bearing", out.bearing);
+
+                // only use the first tag we see
+                break;
+            }
+        }
+        return out;
+    }
 }
-
-
-
-
-
-
-
-
-
